@@ -1,7 +1,6 @@
 require("./config")
-const { smsg, getGroupAdmins, isUrl, sleep } = require('./lib/myfunction')
-const { downloadContentFromMessage, MediaType } = require('@whiskeysockets/baileys')
-const fs = require('fs')
+const { smsg, getGroupAdmins, sleep } = require('./lib/myfunction')
+const { downloadContentFromMessage } = require('@whiskeysockets/baileys')
 const moment = require('moment-timezone')
 
 // Base
@@ -23,10 +22,10 @@ module.exports = async (Kaizen, m) => {
 
         // Salam waktu berdasarkan timezone Asia/Jakarta
         const currentHour = moment().tz("Asia/Jakarta").hours();
-        const ucapanWaktu = currentHour >= 18 ? "Selamat Malam🌃" :
-                             currentHour >= 15 ? "Selamat Sore🌄" :
-                             currentHour >= 11 ? "Selamat Siang🏞️" :
-                             currentHour >= 6 ? "Selamat Pagi🏙️" : "Selamat Subuh🌆";
+        const ucapanWaktu = currentHour >= 18 ? "Selamat Malam 🌃" :
+                             currentHour >= 15 ? "Selamat Sore 🌄" :
+                             currentHour >= 11 ? "Selamat Siang 🏞️" :
+                             currentHour >= 6  ? "Selamat Pagi 🏙️"  : "Selamat Subuh 🌆";
 
         // Fungsi untuk merespon pesan
         const reply = async (teks) => {
@@ -37,25 +36,38 @@ module.exports = async (Kaizen, m) => {
         };
 
         // Fungsi untuk mengirim media ke saluran (channel)
-        const uploadMediaToChannel = async (mediaType, mediaContent) => {
+        const uploadMediaToChannel = async (mediaType, mediaContent, customCaption = "") => {
             let options = {};
-            
-            // Konfigurasi berdasarkan tipe media
-            if (mediaType === 'image') {
-                options = { image: mediaContent, caption: "🖼️ Gambar Berhasil Diunggah" };
-            } else if (mediaType === 'video') {
-                options = { video: mediaContent, caption: "🎥 Video Berhasil Diunggah" };
-            } else if (mediaType === 'audio') {
-                options = { audio: mediaContent, mimetype: 'audio/mp4', ptt: true };
-            } else if (mediaType === 'document') {
-                options = { document: mediaContent, mimetype: quoted.mimetype, fileName: quoted.fileName || 'dokumen' };
-            } else if (mediaType === 'sticker') {
-                options = { sticker: mediaContent };
+
+            // Deteksi dan konfigurasi berdasarkan tipe media
+            switch (mediaType) {
+                case 'image':
+                    options = { image: mediaContent, caption: customCaption || '🖼️ Gambar Berhasil Diunggah!' };
+                    break;
+                case 'video':
+                    options = { video: mediaContent, caption: customCaption || '🎥 Video Berhasil Diunggah!' };
+                    break;
+                case 'audio':
+                    options = { audio: mediaContent, mimetype: 'audio/mp4', ptt: true };
+                    break;
+                case 'document':
+                    options = { document: mediaContent, mimetype: quoted.mimetype, fileName: quoted.fileName || 'Dokumen' };
+                    break;
+                case 'sticker':
+                    options = { sticker: mediaContent };
+                    break;
+                default:
+                    await reply("⚠️ Media yang Anda kirim tidak didukung.");
+                    return;
             }
 
-            await Kaizen.sendMessage(`${global.idch}`, options); // Upload ke channel
-            await sleep(2000); // Beri jeda agar tidak terjadi masalah pengunggahan
-            await reply("☘️ Media Berhasil Diunggah ke Saluran, silakan cek.");
+            try {
+                await Kaizen.sendMessage(`${global.idch}`, options); // Upload ke channel
+                await sleep(2000); // Beri jeda
+                await reply("☘️ Media berhasil diunggah ke saluran. Silakan cek.");
+            } catch (error) {
+                await reply("⚠️ Terjadi kesalahan saat mengunggah media. Coba lagi nanti.");
+            }
         };
 
         // Fungsi untuk memberikan petunjuk penggunaan
@@ -65,9 +77,10 @@ module.exports = async (Kaizen, m) => {
 
 1. Kirim media (gambar, video, audio, dokumen, atau stiker) di chat.
 2. Setelah mengirim media, balas media tersebut dengan perintah:
-   *upch* atau *upsaluran*
-   
-3. Bot akan secara otomatis mengunggah media yang kamu kirim ke saluran yang telah diatur.
+   *upch* atau *upsaluran* [optional_caption]
+
+📝 Jika Anda ingin menambahkan caption, tambahkan teks setelah perintah. Misalnya:
+   *.upch Ini adalah caption saya*
 
 📦 *Tipe Media yang Didukung*:
    - Gambar 🖼️
@@ -78,29 +91,33 @@ module.exports = async (Kaizen, m) => {
 
 💡 *Contoh Penggunaan*:
    - Kirim gambar, lalu balas dengan perintah:
-     *upch*
+     *upch Upload foto berhasil anjay*
    - Kirim audio, lalu balas dengan perintah:
-     *upsaluran*
+     *upsaluran Audio Berhasil!*
 
-Jika berhasil, bot akan menginformasikan bahwa media telah diunggah ke saluran. 😉
+Jika tidak ada caption yang ditambahkan, media akan diunggah tanpa caption. Pastikan Anda membalas media yang ingin diunggah agar perintah berhasil dijalankan.
             `;
             await reply(usageText);
         };
+
+        // Menambahkan deteksi apakah perintah dijalankan tanpa media yang dikutip
+        const isQuotedMedia = quoted && isMedia;
 
         // Handling commands
         switch (command) {
             case "upsaluran":
             case "upch": {
-                if (isMedia) {
-                    reply("Mohon tunggu, proses unggah sedang berlangsung...");
+                if (isQuotedMedia) {
+                    const customCaption = args.join(" "); // Mengambil caption dari teks setelah perintah
+                    reply("🔄 Media sedang diunggah, harap tunggu...");
                     const mediaContent = await quoted.download(); // Unduh media
                     if (mediaContent) {
-                        await uploadMediaToChannel(quoted.mediaType || mime.split('/')[0], mediaContent); // Upload media ke saluran
+                        await uploadMediaToChannel(quoted.mediaType || mime.split('/')[0], mediaContent, customCaption); // Upload media dengan caption custom
                     } else {
-                        await reply("⚠️ Gagal mengunduh media, coba lagi.");
+                        await reply("⚠️ Gagal mengunduh media. Coba lagi atau pastikan media valid.");
                     }
                 } else {
-                    await reply("⚠️ Tidak ada media yang dikutip untuk diunggah. Balas media yang ingin diunggah dengan perintah *upch*.");
+                    await reply("⚠️ Tidak ada media yang dikutip. Pastikan Anda membalas media yang ingin diunggah dengan perintah *upch*.");
                 }
             }
             break;
@@ -113,22 +130,27 @@ Jika berhasil, bot akan menginformasikan bahwa media telah diunggah ke saluran. 
             break;
 
             case ">": {
-                if (!isCreator) return reply("*[System Notice]* Tidak memiliki akses.");
+                if (!isCreator) return reply("🚫 Anda tidak memiliki akses ke perintah ini.");
                 try {
                     const evaled = await eval(args.join(' '));
                     const output = typeof evaled === 'string' ? evaled : require('util').inspect(evaled);
                     await reply(output);
                 } catch (err) {
-                    await reply(String(err));
+                    await reply(`⚠️ Kesalahan saat menjalankan perintah:\n\n${String(err)}`);
                 }
             }
             break;
 
             default:
-                // Handle perintah lainnya jika perlu.
-                break;
+    // Tambahkan penanganan untuk perintah lainnya jika perlu
+    if (isCmd && !isQuotedMedia) {
+        // Tidak ada respons jika perintah tidak valid
+        // Atau bisa dibiarkan kosong agar tidak terjadi apa-apa saat perintah tidak dikenali
+    }
+    break;
         }
     } catch (err) {
-        console.error(err);
+        console.error("⚠️ Terjadi kesalahan:", err);
+        reply("⚠️ Terjadi kesalahan yang tidak terduga. Silakan coba lagi.");
     }
 }
